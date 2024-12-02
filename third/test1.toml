@@ -1,0 +1,7 @@
+[general]
+name = "Test"
+version = 1
+dependencies = ["lib1", "lib2"]
+
+[advanced]
+enabled = true
