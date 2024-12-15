@@ -1,61 +1,59 @@
-import toml
 import sys
 import re
 
-class ConfigTransformer:
+class ConfigConverter:
     def __init__(self):
-        pass
-    
-    def transform_value(self, value):
-        """Преобразует значения в формат учебного конфигурационного языка."""
-        if isinstance(value, int):
-            return str(value)  # Числа остаются числами
-        elif isinstance(value, list):
-            # Для массива: (значение, значение, значение)
-            return f"({', '.join(map(self.transform_value, value))})"
-        elif isinstance(value, str):
-            # Для строки возвращаем саму строку
-            return value
-        return str(value)
+        self.constants = {}
 
-    def transform(self, toml_data):
-        """Преобразует данные из TOML в формат учебного конфигурационного языка."""
-        output_lines = []
-
-        for section, values in toml_data.items():
-            if isinstance(values, dict):
-                # Перебираем все ключи и значения в секции
-                for key, value in values.items():
-                    # Пишем объявление константы
-                    transformed_value = self.transform_value(value)
-                    output_lines.append(f"var {key} := {transformed_value}")
+    def parse_toml(self, line):
+        # Удаляем однострочные комментарии
+        comment_match = re.search(r'#.*$', line)
+        if comment_match:
+            comment = comment_match.group(0)[1:].strip()  # Убираем символ # и пробелы
+            print(f"*> {comment}")  # Выводим комментарий в нужном формате
+            line = line[:comment_match.start()].strip()
+        else:
+            line = line.strip()
+        
+        if not line:
+            return
+        
+        # Обработка объявления константы
+        match = re.match(r'(\w+)\s*=\s*(.+)', line)
+        if match:
+            name, value = match.groups()
+            self.constants[name] = self.parse_value(value)
+            print(f"var {name} := {self.constants[name]}")  # Выводим объявление константы
+            return
+        
+        # Обработка вычисления константы
+        match = re.match(r'@(\w+)', line)
+        if match:
+            name = match.group(1)
+            if name in self.constants:
+                print(self.constants[name])  # Выводим значение константы
             else:
-                # Если это список или другое значение
-                transformed_value = self.transform_value(values)
-                output_lines.append(f"{section} := {transformed_value}")
+                print(f"Ошибка: Константа '{name}' не объявлена.")
+            return
+        
+        print(f"Ошибка: Неправильный синтаксис: '{line}'")
 
-        return "\n".join(output_lines)
-
-    def process_input(self, input_text):
-        """Обрабатывает входной текст TOML и преобразует его."""
+    def parse_value(self, value):
+        # Обработка массивов
+        if value.startswith('(') and value.endswith(')'):
+            array_values = value[1:-1].split(',')
+            return [self.parse_value(v.strip()) for v in array_values]
+        
+        # Обработка чисел
         try:
-            toml_data = toml.loads(input_text)
-            return self.transform(toml_data)
-        except toml.TomlDecodeError as e:
-            print(f"Ошибка синтаксиса TOML: {e}")
-            sys.exit(1)
+            return int(value)
+        except ValueError:
+            return value.strip('"')
 
-def main():
-    transformer = ConfigTransformer()
-    
-    # Чтение входных данных
-    input_text = sys.stdin.read()
-    
-    # Преобразование
-    result = transformer.process_input(input_text)
-    
-    # Вывод результата
-    print(result)
+    def convert(self):
+        for line in sys.stdin:
+            self.parse_toml(line)
 
 if __name__ == "__main__":
-    main()
+    converter = ConfigConverter()
+    converter.convert()
